@@ -18,7 +18,7 @@
 - name: ESXI-70-000003 - The ESXi host must verify the exception users list for lockdown mode
   ansible.builtin.shell:
     cmd: |
-      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password {{ vcenter_password }};
+      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password '{{ vcenter_password }}';
       $vmhost = Get-VMHost -Name {{ item.value.hostname }} | Get-View;
       $lockdown = Get-View $vmhost.ConfigManager.HostAccessManager;
       $exceptions = $lockdown.QueryLockdownExceptions();
@@ -163,9 +163,10 @@
 - name: ESXI-70-000054 - The ESXi host must enable bidirectional CHAP authentication for iSCSI traffic
   ansible.builtin.shell:
     cmd: |
-      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password {{ vcenter_password }};
-      Get-VMHost -Name {{ item.value.hostname }} | Get-VMHostHba | Where {$_.Type -eq "iscsi"} | Set-VMHostHba -ChapType Required -ChapName "{{ chap_name }}"
-      -ChapPassword "{{ chap_password }}" -MutualChapEnabled $true -MutualChapName "{{ mutual_chap_name }}" -MutualChapPassword "{{ mutual_chap_password }}"
+      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password '{{ vcenter_password }}';
+      Get-VMHost -Name {{ item.value.hostname }} | Get-VMHostHba | Where {$_.Type -eq "iscsi"} |
+        Set-VMHostHba -ChapType Required -ChapName "{{ chap_name }}" -ChapPassword '{{ chap_password }}' -MutualChapEnabled $true `
+          -MutualChapName "{{ mutual_chap_name }}" -MutualChapPassword '{{ mutual_chap_password }}'
   args:
     executable: /usr/bin/pwsh
   with_dict:
@@ -418,10 +419,12 @@
 - name: ESXI-70-000056 - The ESXi host must configure the firewall to restrict access to services running on the host
   ansible.builtin.shell:
     cmd: |
-      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password {{ vcenter_password }};
+      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password '{{ vcenter_password }}';
       $allowedips = {{ item.value.allowed_ip }};
-      $fwservices = Get-VMHost -Name {{ item.value.hostname }} | Get-VMHostFirewallException | Where-Object {($_.Enabled -eq $True) -and ($_.extensiondata.allowedhosts.allip -eq 'enabled') -and ($_.Name -ne 'vSphere Web Client') `
-      -and ($_.Name -ne 'dellptagenttcp') -and ($_.Name -ne 'dellsshServer') -and ($_.Name -ne 'VMware vCenter Agent')};
+      $fwservices = Get-VMHost -Name {{ item.value.hostname }} | Get-VMHostFirewallException | 
+        Where-Object {($_.Enabled -eq $True) -and ($_.extensiondata.allowedhosts.allip -eq 'enabled') `
+          -and ($_.Name -ne 'vSphere Web Client') -and ($_.Name -ne 'dellptagenttcp') `
+          -and ($_.Name -ne 'dellsshServer') -and ($_.Name -ne 'VMware vCenter Agent')};
       $esxcli = Get-EsxCli -VMHost {{ item.value.hostname }} -V2;
       ForEach($fwservice in $fwservices){
         $fwsvcname = $fwservice.extensiondata.key;
@@ -430,10 +433,7 @@
         $fwargs.rulesetid = $fwsvcname;
         $esxcli.network.firewall.ruleset.set.Invoke($fwargs) | Out-Null;
         ForEach($allowedip in $allowedips){
-          $fwallowedargs = $esxcli.network.firewall.ruleset.allowedip.add.CreateArgs();
-          $fwallowedargs.ipaddress = $allowedip;
-          $fwallowedargs.rulesetid = $fwsvcname;
-          $esxcli.network.firewall.ruleset.allowedip.add.Invoke($fwallowedargs) | Out-Null;
+          $esxcli.network.firewall.ruleset.allowedip.add("$allowedip",$fwsvcname) | Out-Null;
         }
       }
   args:
@@ -796,7 +796,7 @@
 - name: ESXI-70-000001 - Access to the ESXi host must be limited by enabling Lockdown Mode
   ansible.builtin.shell:
     cmd: |
-      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password {{ vcenter_password }};
+      Connect-VIServer -Server {{ vcenter_hostname }} -User {{ vcenter_username }} -Password '{{ vcenter_password }}';
       $vmhost = Get-VMHost -Name {{ item.value.hostname }} | Get-View;
       $level = "{{ esxi_lockdown_level }}"
       $lockdown = Get-View $vmhost.ConfigManager.HostAccessManager;
